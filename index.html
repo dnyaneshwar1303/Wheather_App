@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Forecast App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-100 min-h-screen p-4">
+  <div class="max-w-xl mx-auto bg-white rounded-lg shadow p-6">
+    <h1 class="text-3xl font-bold text-center text-blue-700 mb-6">Weather Forecast</h1>
+
+    <!-- Search Buttons -->
+    <div class="flex flex-col sm:flex-row items-center gap-4 mb-4">
+      <!-- Input field for city name -->
+      <input id="cityInput" type="text" placeholder="Enter city"
+             class="flex-1 px-4 py-2 border rounded w-full sm:w-auto">
+      <button onclick="searchCity()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Search
+      </button>
+      <button onclick="getCurrentLocation()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+        Current Location
+      </button>
+    </div>
+
+    <!-- Dropdown for recent cities -->
+    <div id="recentDropdown" class="relative mb-4 hidden">
+      <label class="block font-semibold mb-1 text-gray-700">Recent Cities:</label>
+      <select id="recentCities" onchange="selectRecentCity(this.value)"
+              class="w-full border px-4 py-2 rounded">
+        <option selected disabled>Select a city</option>
+      </select>
+    </div>
+
+    <!-- Weather Display -->
+    <div id="weather" class="mb-4"></div>
+
+    <!-- Forecast Display -->
+    <div id="forecast" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+  </div>
+
+  <script>
+    const API_KEY = '7d423df9ed0293d5ae90da03bc5452ab';
+
+    // Function to search weather by city name
+    function searchCity() {
+      const city = document.getElementById('cityInput').value.trim();
+
+      // Input Validation
+      if (!city || !/^[a-zA-Z\s,]+$/.test(city)) {
+        showError('Please enter a valid city name.');
+        return;
+      }
+
+      // Fetch and display current weather and forecast
+      getCurrentWeather(city);
+      getForecast(city);
+      saveRecentCity(city);
+    }
+
+    // Function to fetch weather based on user's current location
+    function getCurrentLocation() {
+      if (!navigator.geolocation) {
+        showError('Geolocation not supported.');
+        return;
+      }
+
+      // Get current location and fetch weather data
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`
+          );
+          if (!res.ok) throw new Error('Failed to fetch weather for location.');
+          const data = await res.json();
+          displayCurrentWeather(data);
+          getForecast(data.name);
+          saveRecentCity(data.name);
+        } catch {
+          showError('Could not fetch weather for your location.');
+        }
+      }, () => {
+        showError('Location access denied.');
+      });
+    }
+
+    // Fetch current weather from OpenWeatherMap API
+    async function getCurrentWeather(city) {
+      try {
+        const res = await fetch(
+          `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`
+        );
+        if (!res.ok) throw new Error('City not found.');
+        const data = await res.json();
+        displayCurrentWeather(data);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // Fetch forecast data (5-day forecast) from OpenWeatherMap API
+    async function getForecast(city) {
+      try {
+        const res = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`
+        );
+        if (!res.ok) throw new Error('Forecast not found.');
+        const data = await res.json();
+        displayForecast(data.list);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // Display current weather details
+    function displayCurrentWeather(data) {
+      document.getElementById('weather').innerHTML = `
+        <div class="text-center">
+          <h2 class="text-2xl font-semibold">${data.name}, ${data.sys.country}</h2>
+          <p class="text-lg">${data.weather[0].main} - ${data.weather[0].description}</p>
+          <img src="https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png" class="mx-auto" />
+          <p class="text-4xl font-bold">${data.main.temp}°C</p>
+          <p>Humidity: ${data.main.humidity}% | Wind: ${data.wind.speed} m/s</p>
+        </div>
+      `;
+    }
+
+    // Display the 5-day weather forecast
+    function displayForecast(list) {
+      const forecast = {};
+      list.forEach(item => {
+        const date = item.dt_txt.split(' ')[0];
+        if (!forecast[date] && item.dt_txt.includes('12:00:00')) {
+          forecast[date] = item;
+        }
+      });
+
+      const forecastContainer = document.getElementById('forecast');
+      forecastContainer.innerHTML = '';
+      Object.keys(forecast).slice(0, 5).forEach(date => {
+        const item = forecast[date];
+        forecastContainer.innerHTML += `
+          <div class="bg-blue-200 p-4 rounded text-center shadow">
+            <p class="font-semibold">${new Date(date).toDateString()}</p>
+            <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}@2x.png" class="mx-auto" />
+            <p class="text-xl font-bold">${item.main.temp}°C</p>
+            <p>${item.weather[0].main}</p>
+            <p>💨 ${item.wind.speed} m/s | 💧 ${item.main.humidity}%</p>
+          </div>
+        `;
+      });
+    }
+
+    // Display error messages
+    function showError(msg) {
+      document.getElementById('weather').innerHTML = `<p class="text-center text-red-600 font-semibold">${msg}</p>`;
+      document.getElementById('forecast').innerHTML = '';
+    }
+
+    // Save the city name in localStorage for recent cities
+    function saveRecentCity(city) {
+      let cities = JSON.parse(localStorage.getItem('recentCities')) || [];
+      city = city.toLowerCase();
+      if (!cities.includes(city)) {
+        cities.unshift(city);
+        if (cities.length > 5) cities.pop(); // Limit to 5
+        localStorage.setItem('recentCities', JSON.stringify(cities));
+      }
+      updateRecentDropdown();
+    }
+
+    // Update the recent cities dropdown list
+    function updateRecentDropdown() {
+      const cities = JSON.parse(localStorage.getItem('recentCities')) || [];
+      const dropdown = document.getElementById('recentDropdown');
+      const select = document.getElementById('recentCities');
+
+      if (cities.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+
+      dropdown.classList.remove('hidden');
+      select.innerHTML = '<option selected disabled>Select a city</option>';
+      cities.forEach(city => {
+        select.innerHTML += `<option value="${city}">${city}</option>`;
+      });
+    }
+
+    // Select a recent city from the dropdown
+    function selectRecentCity(city) {
+      if (city) {
+        getCurrentWeather(city);
+        getForecast(city);
+      }
+    }
+
+    // Update the dropdown when the page loads
+    window.onload = updateRecentDropdown;
+  </script>
+</body>
+</html>
